@@ -12,9 +12,8 @@ MODULE SPS_VARS
 #define C3K 0
 
 !------set the isochrone library------!
-#define MIST 1
-!Padova models circa 2008
-#define PADOVA 0
+#define MIST 0
+#define PADOVA 1
 #define PARSEC 0
 #define BASTI 0
 #define GENEVA 0
@@ -79,6 +78,8 @@ MODULE SPS_VARS
   INTEGER :: add_agb_dust_model=1
 
   !turn on/off a Cloudy-based nebular emission model (cont+lines)
+  !if set to 2, then the nebular emission lines are added at the SSP
+  !level, which may be useful if the nebular parameters are fixed
   INTEGER :: add_neb_emission=0
   !turn on/off the nebular continuum component (automatically 
   !turned off if the above is set to 0)
@@ -145,8 +146,20 @@ MODULE SPS_VARS
   !flag indicating whether to use the Mdot tabulated in the isochrone
   !files (if available) for the AGB dust model.  Note: only use this
   !feature with isochrone files that include Mdot (e.g., MIST)
-  INTEGER, PARAMETER :: use_isoc_mdot=0
+  INTEGER :: use_isoc_mdot=0
 
+  !flag indicating if the Gaussians used for implementing
+  !nebular emission lines should be set up on initialization
+  INTEGER :: setup_nebular_gaussians=0
+
+  !Width of Gaussian kernels for initial nebular smoothing
+  !if setup_nebular_gaussians=1 (units=km/s if smooth_velocity=1)
+  REAL(SP) :: nebular_smooth_init=100.
+
+  !flag to include emission lines in the spectrum
+  !if not set, the line luminosities are still computed
+  INTEGER :: nebemlineinspec=1
+  
   !------------Pre-compiler defintions------------!
   
   !flag indicating type of isochrones to use
@@ -189,7 +202,7 @@ MODULE SPS_VARS
   REAL(SP), PARAMETER :: zsol_spec = 0.0134
   CHARACTER(5), PARAMETER :: spec_type = 'ckc14'
   INTEGER, PARAMETER :: nzinit=6
-  INTEGER, PARAMETER :: nspec=47378 !, 26500
+  INTEGER, PARAMETER :: nspec=47378  !46666 !47378 !, 26500
 #elif (BASEL)
   REAL(SP), PARAMETER :: zsol_spec = 0.020
   CHARACTER(5), PARAMETER :: spec_type = 'basel'
@@ -207,7 +220,7 @@ MODULE SPS_VARS
 
   !You must change the number of bands here if
   !filters are added to allfilters.dat
-  INTEGER, PARAMETER :: nbands=138
+  INTEGER, PARAMETER :: nbands=143
   !number of indices defined in allindices.dat
   INTEGER, PARAMETER :: nindx=30
   
@@ -239,7 +252,7 @@ MODULE SPS_VARS
   !number of emission lines and continuum emission points
   INTEGER, PARAMETER :: nemline=128, nlam_nebcont=1963
   !number of metallicity, age, and ionization parameter points
-  INTEGER, PARAMETER :: nebnz=11, nebnage=8, nebnip=7
+  INTEGER, PARAMETER :: nebnz=11, nebnage=9, nebnip=7
   !number of optical depths for AGN dust models
   INTEGER, PARAMETER :: nagndust=9
   !number of spectral points in the input library
@@ -413,6 +426,7 @@ MODULE SPS_VARS
   !minimum resolution for nebular lines, based 
   !on the resolution of the spectral libraries.
   REAL(SP), DIMENSION(nspec)   :: neb_res_min=0.0
+  REAL(SP), DIMENSION(nspec,nemline) :: gaussnebarr=0.0
 
   !arrays for AGN dust
   REAL(SP), DIMENSION(nagndust)       :: agndust_tau=0.
@@ -459,9 +473,10 @@ MODULE SPS_VARS
   !structure for the output of the compsp routine
   TYPE COMPSPOUT
      REAL(SP) :: age=0.,mass_csp=0.,lbol_csp=0.,sfr=0.,mdust=0.,mformed=0.
-     REAL(SP), DIMENSION(nbands) :: mags=0.
-     REAL(SP), DIMENSION(nspec)  :: spec=0.
-     REAL(SP), DIMENSION(nindx)  :: indx=0.
+     REAL(SP), DIMENSION(nbands)  :: mags=0.
+     REAL(SP), DIMENSION(nspec)   :: spec=0.
+     REAL(SP), DIMENSION(nindx)   :: indx=0.
+     REAL(SP), DIMENSION(nemline) :: emlines=0.
   END TYPE COMPSPOUT
 
   ! A structure to hold SFH params converted to intrinsic units
@@ -504,4 +519,5 @@ MODULE SPS_VARS
   !REAL, DIMENSION(nspec,ntfull,ntaugrid,nz) :: csp_grid=0.0
   !INTEGER :: csp_grid_flag=0
 
+ 
 END MODULE SPS_VARS

@@ -1,4 +1,4 @@
-SUBROUTINE ADD_NEBULAR(pset,sspi,sspo)
+SUBROUTINE ADD_NEBULAR(pset,sspi,sspo,nebemline)
 
   !routine to add nebular emission (both line and continuum)
   !to input SSPs (sspi).  Returns SSPs as output (sspo).
@@ -11,9 +11,9 @@ SUBROUTINE ADD_NEBULAR(pset,sspi,sspo)
   TYPE(PARAMS), INTENT(in) :: pset
   REAL(SP), INTENT(in), DIMENSION(nspec,ntfull)    :: sspi
   REAL(SP), INTENT(inout), DIMENSION(nspec,ntfull) :: sspo
+  REAL(SP), INTENT(inout), DIMENSION(nemline,ntfull), OPTIONAL :: nebemline
   REAL(SP), DIMENSION(nemline) :: tmpnebline
   REAL(SP), DIMENSION(nspec)   :: tmpnebcont,nu
-  REAL(SP), DIMENSION(nspec,nemline) :: tmparr
 
   !-----------------------------------------------------------!
   !-----------------------------------------------------------!
@@ -32,29 +32,32 @@ SUBROUTINE ADD_NEBULAR(pset,sspi,sspo)
   du = MAX(MIN(du,1.0),0.0) !no extrapolation
 
   !set up a "master" array of normalized Gaussians
-  !this makes the code much faster
-  DO i=1,nemline
-     IF (smooth_velocity.EQ.1) THEN
-        !smoothing variable is km/s
-        dlam = nebem_line_pos(i)*pset%sigma_smooth/clight*1E13
-     ELSE
-        !smoothing variable is A
-        dlam = pset%sigma_smooth
-     ENDIF
-     !broaden the line to at least the resolution element 
-     !of the spectrum.  This is approximate.
-     dlam = MAX(dlam,neb_res_min(i))
-     tmparr(:,i) = 1/SQRT(2*mypi)/dlam*&
-          EXP(-(spec_lambda-nebem_line_pos(i))**2/2/dlam**2)  / &
-          clight*nebem_line_pos(i)**2
-  ENDDO
+  !in sps_setup.f90 this makes the code much faster
+  IF (setup_nebular_gaussians.EQ.0.AND.nebemlineinspec.EQ.1) THEN
+     DO i=1,nemline
+        IF (smooth_velocity.EQ.1) THEN
+           !smoothing variable is km/s
+           dlam = nebem_line_pos(i)*pset%sigma_smooth/clight*1E13
+        ELSE
+           !smoothing variable is A
+           dlam = pset%sigma_smooth
+        ENDIF
+        !broaden the line to at least the resolution element 
+        !of the spectrum (x2).
+        dlam = MAX(dlam,neb_res_min(i)*2)
+        gaussnebarr(:,i) = 1/SQRT(2*mypi)/dlam*&
+             EXP(-(spec_lambda-nebem_line_pos(i))**2/2/dlam**2)  / &
+             clight*nebem_line_pos(i)**2
+     ENDDO
+  ENDIF
 
   sspo = sspi
-
+  nebemline = 0.0
+  
   DO t=1,nti
 
      !remove ionizing photons from the stellar source
-     sspo(1:whlylim,t) = sspi(1:whlylim,t) * pset%frac_obrun
+     sspo(1:whlylim,t) = sspi(1:whlylim,t)*MAX(MIN(pset%frac_obrun,1.0),0.0)
 
      !the number of ionizing photons is computed here
      !some fraction of the stars are "runaways" which means
@@ -93,10 +96,14 @@ SUBROUTINE ADD_NEBULAR(pset,sspi,sspo)
           (dz)*(da)*(1-du)*     nebem_line(:,z1+1,a1+1,u1)+&
           (dz)*(da)*(du)*       nebem_line(:,z1+1,a1+1,u1+1)
 
-     DO i=1,nemline
-        sspo(:,t) = sspo(:,t) + 10**tmpnebline(i)*qq*tmparr(:,i)
-     ENDDO
+     IF (PRESENT(nebemline)) nebemline(:,t) = 10**tmpnebline*qq
 
+     IF (nebemlineinspec.EQ.1) THEN
+        DO i=1,nemline
+           sspo(:,t) = sspo(:,t) + 10**tmpnebline(i)*qq*gaussnebarr(:,i)
+        ENDDO
+     ENDIF
+        
   ENDDO
 
 
